@@ -1,60 +1,38 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Escáner de QR</title>
-  <script src="script.js"></script>
-  <script src="instascan.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactuar con API</title>
 </head>
 <body>
-  <h1>Escáner de QR</h1>
-  <input type="file" accept="image/*" id="fileInput" />
-  <button onclick="importQR()">Importar QR</button>
-  <video id="preview"></video>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      let video = document.getElementById('preview');
-      let fileInput = document.getElementById('fileInput');
+    <h1>Listado de Estudiantes</h1>
+    
+    <div id="estudiantes-lista"></div>
 
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        let scanner = new Instascan.Scanner({ video: video });
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // Función para obtener y mostrar la lista de estudiantes
+            function listarEstudiantes() {
+                fetch('http://localhost:8000/estudiantes')
+                    .then(response => response.json())
+                    .then(data => {
+                        // Manipular la respuesta y mostrarla en la página
+                        const estudiantesLista = document.getElementById('estudiantes-lista');
+                        estudiantesLista.innerHTML = '<h3>Lista de Estudiantes:</h3>';
+                        
+                        data.forEach(estudiante => {
+                            estudiantesLista.innerHTML += `<p>${estudiante.CodigoEstudiante}: ${estudiante.Nombre} ${estudiante.Apellido}</p>`;
+                        });
+                    })
+                    .catch(error => console.error('Error al obtener la lista de estudiantes:', error));
+            }
 
-        scanner.addListener('scan', function (content) {
-          alert('Código QR escaneado: ' + content);
-          // Puedes hacer algo con el contenido del código QR aquí
+            // Llamar a la función para listar estudiantes al cargar la página
+            listarEstudiantes();
         });
+    </script>
 
-        Instascan.Camera.getCameras().then(function (cameras) {
-          if (cameras.length > 0) {
-            scanner.start(cameras[0]);
-          } else {
-            console.error('No se encontraron cámaras.');
-          }
-        }).catch(function (e) {
-          console.error(e);
-        });
-      } else {
-        console.error('getUserMedia no está soportado en tu navegador.');
-      }
-
-      // Función para manejar la importación de QR desde un archivo
-      window.importQR = function () {
-        let file = fileInput.files[0];
-        if (file) {
-          let reader = new FileReader();
-          reader.onload = function (e) {
-            let qrContent = e.target.result;
-            alert('Código QR importado: ' + qrContent);
-            // Puedes hacer algo con el contenido del código QR aquí
-          };
-          reader.readAsText(file);
-        } else {
-          alert('Selecciona un archivo antes de importar.');
-        }
-      };
-    });
-  </script>
 </body>
 </html>

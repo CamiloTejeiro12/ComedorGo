@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+</head>
+<body>
+    <h1>Login</h1>
+    <form id="loginForm">
+        <label for="codigoEstudiante">Código de Estudiante:</label>
+        <input type="text" id="codigoEstudiante" name="codigoEstudiante" required>
+        <br>
+        <label for="password">Contraseña:</label>
+        <input type="password" id="password" name="password" required>
+        <br>
+        <button type="button" onclick="login()">Iniciar Sesión</button>
+    </form>
+
+    <script>
+        function login() {
+            var codigoEstudiante = document.getElementById('codigoEstudiante').value;
+            var password = document.getElementById('password').value;
+
+            // Puedes realizar aquí una solicitud HTTP (por ejemplo, con fetch o XMLHttpRequest)
+            // a tu endpoint de login, pasando los datos del formulario.
+
+            // Ejemplo con fetch:
+            fetch('http://localhost:8000/loginestudiante', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    FKInformacionEstudiante: codigoEstudiante,
+                    Password: password,
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Respuesta del servidor:', data);
+                // Puedes manejar la respuesta del servidor según tus necesidades
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+    </script>
+</body>
+</html>

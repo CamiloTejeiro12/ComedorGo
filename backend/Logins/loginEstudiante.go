@@ -1,79 +1,91 @@
 package Logins
 
 import (
+	"ComedorGo/backend/Estudiantes"
 	"ComedorGo/backend/Models"
 	"ComedorGo/backend/db"
-	"github.com/gorilla/sessions"
+	"encoding/json"
+	"fmt"
+	"gorm.io/gorm"
+	"io/ioutil"
 	"net/http"
+
+	"github.com/gorilla/sessions"
+	"golang.org/x/crypto/bcrypt"
 )
 
-var store = sessions.NewCookieStore([]byte("secret-key"))
+var store = sessions.NewCookieStore([]byte("your-secret-key"))
 
-// Función para manejar el login
+// LoginHandler handles the login logic for students
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
-	session, _ := store.Get(r, "session-name")
 
-	if r.Method == http.MethodPost {
-		username := r.FormValue("username")
-		password := r.FormValue("password")
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Error reading request body", http.StatusBadRequest)
+		return
+	}
+	fmt.Println("Body:", string(body))
 
-		var estudiante Models.InformacionEstudiante
-		var login db.LoginEstudiante
-
-		// Buscar el estudiante por nombre de usuario
-		if err := db.DB.Where("nombre = ?", username).First(&estudiante).Error; err != nil {
-			http.Error(w, "Usuario no encontrado", http.StatusUnauthorized)
-			return
-		}
-
-		// Buscar el login del estudiante
-		if err := db.DB.Where("fk_informacion_estudiante = ?", estudiante.CodigoEstudiante).First(&login).Error; err != nil {
-			http.Error(w, "Error al buscar información de login", http.StatusInternalServerError)
-			return
-		}
-
-		// Verificar la contraseña
-		if password != login.Password {
-			http.Error(w, "Contraseña incorrecta", http.StatusUnauthorized)
-			return
-		}
-
-		// Iniciar sesión
-		session.Values["user"] = username
-		session.Save(r, w)
-
-		// Redireccionar al dashboard u otra página
-		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+	// Decodificación del cuerpo de la solicitud
+	var loginData Models.LoginEstudiante
+	err = json.Unmarshal(body, &loginData)
+	if err != nil {
+		http.Error(w, "Error decoding the request", http.StatusBadRequest)
 		return
 	}
 
+	loginEstudiante, err := GetLoginEstudiantePorCodigo(db.DB, loginData.FKInformacionEstudiante)
+	if err != nil {
+		http.Error(w, "Student login not found", http.StatusNotFound)
+		return
+	}
+
+	fmt.Println("Contraseña ingresada:", loginData.Password)
+	fmt.Println("Contraseña almacenada:", loginEstudiante.Password)
+	// Get student information by student code
+	estudiante, err := Estudiantes.GetEstudiantePorCodigo(db.DB, loginData.FKInformacionEstudiante)
+	if err != nil {
+		http.Error(w, "Student not found", http.StatusNotFound)
+		return
+	}
+
+	// Logs adicionales
+	fmt.Println("Contraseña ingresada:", loginData.Password)
+	fmt.Println("Contraseña almacenada:", loginEstudiante.Password)
+
+	// Compare the password using the LoginEstudiante struct
+	err = bcrypt.CompareHashAndPassword([]byte(loginEstudiante.Password), []byte(loginData.Password))
+	if err != nil {
+		fmt.Println("Contraseñas no coinciden:", err)
+		http.Error(w, "Incorrect credentials", http.StatusUnauthorized)
+		return
+	}
+	fmt.Println("Contraseñas coinciden")
+
+	// Create session
+	session, err := store.Get(r, "session-name")
+	if err != nil {
+		http.Error(w, "Error creating session", http.StatusInternalServerError)
+		return
+	}
+
+	// Store the student code in the session
+	session.Values["codigoEstudiante"] = estudiante.CodigoEstudiante
+	err = session.Save(r, w)
+	if err != nil {
+		http.Error(w, "Error saving session", http.StatusInternalServerError)
+		return
+	}
+
+	// Redirect to the frontend (change "/path/to/index.html" to the correct path)
+	http.Redirect(w, r, "/index.html", http.StatusSeeOther)
 }
 
-func AuthMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		session, _ := store.Get(r, "session-name")
-		if _, ok := session.Values["user"]; !ok {
-			http.Redirect(w, r, "/login", http.StatusSeeOther)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+func GetLoginEstudiantePorCodigo(dbInstance *gorm.DB, codigoEstudiante uint) (db.LoginEstudiante, error) {
+	var loginEstudiante db.LoginEstudiante
+	result := dbInstance.Where("fk_informacion_estudiante = ?", codigoEstudiante).First(&loginEstudiante)
+	if result.Error != nil {
+		return db.LoginEstudiante{}, result.Error
+	}
+	return loginEstudiante, nil
 }
-
-/*
-// Configurar rutas con Gorilla Mux
-func SetupRoutes() *mux.Router {
-	router := mux.NewRouter()
-
-	// Ruta para el login
-	router.HandleFunc("/login", LoginHandler).Methods("GET", "POST")
-
-	// Rutas autenticadas
-	authRouter := router.PathPrefix("/auth").Subrouter()
-	authRouter.Use(AuthMiddleware)
-	authRouter.HandleFunc("/dashboard", DashboardHandler).Methods("GET")
-
-	return router
-}
-
-*/
