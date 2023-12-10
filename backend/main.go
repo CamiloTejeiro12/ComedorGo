@@ -4,33 +4,30 @@ import (
 	"ComedorGo/backend/Api"
 	"ComedorGo/backend/db"
 	"fmt"
-	"github.com/gorilla/mux"
-	"net/http"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
+	// Configura la base de datos
 	db.SetupDatabase()
 
-	r := mux.NewRouter()
+	// Crea una instancia de Gin
+	r := gin.Default()
 
 	// Configurar encabezados CORS
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-			next.ServeHTTP(w, r)
-		})
+	r.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "http://localhost:5173")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	})
 
 	// Incluye las rutas de la API de estudiantes
-
 	Api.EstudianteRoutes(r)
+
 	// Ejemplo para generar un QR y guardarlo a través de la API
-	r.HandleFunc("/api/generarqr", Api.GenerarYGuardarQR).Methods("POST")
+	//r.POST("/api/generarqr", Api.GenerarYGuardarQR)
 
 	// Configura el enrutador y comienza a escuchar
-	http.Handle("/", r)
 	fmt.Println("Escuchando en http://localhost:8000...")
-	http.ListenAndServe("localhost:8000", nil)
+	r.Run("localhost:8000")
 }

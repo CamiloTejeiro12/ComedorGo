@@ -6,151 +6,156 @@ import (
 	"ComedorGo/backend/Logins"
 	"ComedorGo/backend/Models"
 	"ComedorGo/backend/db"
-	"encoding/json"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
-	//"strconv"
 )
 
 // EstudianteRoutes define las rutas de la API
-func EstudianteRoutes(r *mux.Router) {
-	r.HandleFunc("/estudiantes", ListarEstudiantes).Methods("GET")
-	r.HandleFunc("/estudiantesinscritos", ObtenerEstudiantesInscritosHandler).Methods("GET")
-	r.HandleFunc("/estudiantes/{codigo}", ObtenerEstudiante).Methods("GET")
-	r.HandleFunc("/estudiantes", CrearEstudiante).Methods("POST")
-	r.HandleFunc("/loginestudiante", Logins.LoginHandler).Methods("POST")
-	r.HandleFunc("/api/desencriptarqr", DesencriptarQR).Methods("POST")
-	r.HandleFunc("/inscribircomedor", InscribirComedorHandler).Methods("POST")
-	r.HandleFunc("/inscripcionporcadena", InscripcionPorCadenaHandler).Methods("POST") // Nuevo endpoint
+func EstudianteRoutes(r *gin.Engine) {
+	// Configurar encabezados CORS
+	r.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	})
 
-	r.HandleFunc("/api/generarqr)", GenerarYGuardarQR).Methods("POST")
-	// Agrega estas líneas al final de EstudianteRoutes en Routes.go
-	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./static/"))))
-	//r.HandleFunc("/login", MostrarPaginaLogin).Methods("GET")
+	// Grupo de rutas para estudiantes
+	estudiantesGroup := r.Group("/estudiantes")
+	{
+		estudiantesGroup.GET("", ListarEstudiantes)
+		estudiantesGroup.GET("/:codigo", ObtenerEstudiante)
+		estudiantesGroup.POST("", CrearEstudiante)
+	}
 
+	// Ruta para obtener la lista de estudiantes inscritos
+	r.GET("/estudiantesinscritos", ObtenerEstudiantesInscritosHandler)
+
+	// Rutas adicionales
+	r.POST("/loginestudiante", Logins.LoginHandler)
+	r.POST("/api/desencriptarqr", DesencriptarQR)
+	r.POST("/inscribircomedor", InscribirComedorHandler)
+	r.POST("/inscripcionporcadena", InscripcionPorCadenaHandler)
+
+	// Ruta para generar y guardar QR
+	r.POST("/api/generarqr", GenerarYGuardarQR)
+
+	// Ruta para servir archivos estáticos
+	r.Static("/static", "./static")
 }
 
 // ListarEstudiantes devuelve la lista de estudiantes
-func ListarEstudiantes(w http.ResponseWriter, r *http.Request) {
+func ListarEstudiantes(c *gin.Context) {
 	// Obtener la lista de estudiantes desde el paquete Estudiantes
 	estudiantes, err := Estudiantes.ListarEstudiantes(db.DB)
 	if err != nil {
-		http.Error(w, "Error al obtener la lista de estudiantes", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al obtener la lista de estudiantes"})
 		return
 	}
 
-	// Configurar la respuesta HTTP con el encabezado y el cuerpo JSON
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(estudiantes)
+	// Configurar la respuesta HTTP con el cuerpo JSON
+	c.JSON(http.StatusOK, estudiantes)
 }
 
 // ObtenerEstudiante devuelve un estudiante por su código
-func ObtenerEstudiante(w http.ResponseWriter, r *http.Request) {
+func ObtenerEstudiante(c *gin.Context) {
 	// Obtener el código del estudiante desde la URL
-	params := mux.Vars(r)
-	codigoEstudianteStr := params["codigo"]
+	codigoEstudianteStr := c.Param("codigo")
 
 	codigoEstudiante, err := strconv.ParseUint(codigoEstudianteStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Error al convertir el código de estudiante", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error al convertir el código de estudiante"})
 		return
 	}
 
 	// Obtener la información del estudiante
 	estudiante, err := Estudiantes.GetEstudiantePorCodigo(db.DB, uint(codigoEstudiante))
 	if err != nil {
-		http.Error(w, "Estudiante no encontrado", http.StatusNotFound)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Estudiante no encontrado"})
 		return
 	}
 
-	// Configurar la respuesta HTTP con el encabezado y el cuerpo JSON
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(estudiante)
+	// Configurar la respuesta HTTP con el cuerpo JSON
+	c.JSON(http.StatusOK, estudiante)
 }
 
 // CrearEstudiante crea un nuevo estudiante
-func CrearEstudiante(w http.ResponseWriter, r *http.Request) {
+func CrearEstudiante(c *gin.Context) {
 	// Leer y decodificar el estudiante desde el cuerpo de la solicitud
 	var nuevoEstudiante Models.InformacionEstudiante
-	err := json.NewDecoder(r.Body).Decode(&nuevoEstudiante)
-	if err != nil {
-		http.Error(w, "Error al decodificar la solicitud", http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&nuevoEstudiante); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error al decodificar la solicitud"})
 		return
 	}
 
 	// Crear estudiante
-	err = Estudiantes.CrearEstudiante(db.DB, &nuevoEstudiante)
+	err := Estudiantes.CrearEstudiante(db.DB, &nuevoEstudiante)
 	if err != nil {
-		http.Error(w, "Error al crear estudiante", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al crear estudiante"})
 		return
 	}
 
-	// Configurar la respuesta HTTP con el encabezado y el cuerpo JSON
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Estudiante creado con éxito"})
+	// Configurar la respuesta HTTP con el cuerpo JSON
+	c.JSON(http.StatusOK, gin.H{"message": "Estudiante creado con éxito"})
 }
 
 // ObtenerEstudiantesInscritos devuelve la lista de estudiantes inscritos
-func ObtenerEstudiantesInscritosHandler(w http.ResponseWriter, r *http.Request) {
+func ObtenerEstudiantesInscritosHandler(c *gin.Context) {
 	// Implementa la lógica para obtener la lista de estudiantes inscritos
 	estudiantesInscritos, err := Inscripcion.ObtenerEstudiantesInscritos(db.DB)
 	if err != nil {
-		http.Error(w, "Error al obtener la lista de estudiantes inscritos", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al obtener la lista de estudiantes inscritos"})
 		return
 	}
 
-	// Configura la respuesta HTTP con el encabezado y el cuerpo JSON
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(estudiantesInscritos)
+	// Configura la respuesta HTTP con el cuerpo JSON
+	c.JSON(http.StatusOK, estudiantesInscritos)
 }
 
 var qrCodeString string
 
-// Implementar la función InscribirAlComedor
-// Ejemplo de un manejador HTTP
-func InscribirComedorHandler(w http.ResponseWriter, r *http.Request) {
-	// ... Leer y decodificar la información del estudiante desde el cuerpo de la solicitud
+// InscribirComedorHandler maneja la inscripción al comedor
+func InscribirComedorHandler(c *gin.Context) {
+	// Leer y decodificar la información del estudiante desde el cuerpo de la solicitud
 	var nuevoEstudiante Models.InformacionEstudiante
-	err := json.NewDecoder(r.Body).Decode(&nuevoEstudiante)
-	if err != nil {
-		http.Error(w, "Error al decodificar la solicitud", http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&nuevoEstudiante); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error al decodificar la solicitud"})
 		return
 	}
 
 	// Llamar a la función InscribirAlComedor y manejar el error
-	err = Inscripcion.InscribirAlComedor(nuevoEstudiante.CodigoEstudiante, qrCodeString)
+	err := Inscripcion.InscribirAlComedor(nuevoEstudiante.CodigoEstudiante, qrCodeString)
 	if err != nil {
-		http.Error(w, "Error al inscribir al comedor: "+err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al inscribir al comedor", "message": err.Error()})
 		return
 	}
 
-	// Configurar la respuesta HTTP con el encabezado y el cuerpo JSON
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Estudiante inscrito en el comedor con éxito"})
+	// Configurar la respuesta HTTP con el cuerpo JSON
+	c.JSON(http.StatusOK, gin.H{"message": "Estudiante inscrito en el comedor con éxito"})
 }
 
-func InscripcionPorCadenaHandler(w http.ResponseWriter, r *http.Request) {
+// InscripcionPorCadenaHandler maneja la inscripción por cadena
+func InscripcionPorCadenaHandler(c *gin.Context) {
 	// Leer y decodificar la información del estudiante y la cadena desde el cuerpo de la solicitud
 	var solicitud struct {
 		CodigoEstudiante uint   `json:"codigoEstudiante"`
 		CadenaComparar   string `json:"cadenaComparar"`
 	}
 
-	err := json.NewDecoder(r.Body).Decode(&solicitud)
-	if err != nil {
-		http.Error(w, "Error al decodificar la solicitud", http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&solicitud); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error al decodificar la solicitud"})
 		return
 	}
 
 	// Llamar a la función InscripcionPorCadena y manejar el error
-	err = Inscripcion.InscripcionPorCadena(solicitud.CodigoEstudiante, solicitud.CadenaComparar)
+	err := Inscripcion.InscripcionPorCadena(solicitud.CodigoEstudiante, solicitud.CadenaComparar)
 	if err != nil {
-		http.Error(w, "Error al realizar la inscripción por cadena: "+err.Error(), http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al realizar la inscripción por cadena", "message": err.Error()})
 		return
 	}
 
-	// Configurar la respuesta HTTP con el encabezado y el cuerpo JSON
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Estudiante inscrito en el comedor con éxito por cadena"})
+	// Configurar la respuesta HTTP con el cuerpo JSON
+	c.JSON(http.StatusOK, gin.H{"message": "Estudiante inscrito en el comedor con éxito por cadena"})
 }
+
+// Resto del código...

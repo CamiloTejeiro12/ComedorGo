@@ -6,6 +6,7 @@ import (
 	"ComedorGo/backend/db"
 	"encoding/json"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"io/ioutil"
 	"net/http"
@@ -17,11 +18,10 @@ import (
 var store = sessions.NewCookieStore([]byte("your-secret-key"))
 
 // LoginHandler handles the login logic for students
-func LoginHandler(w http.ResponseWriter, r *http.Request) {
-
-	body, err := ioutil.ReadAll(r.Body)
+func LoginHandler(c *gin.Context) {
+	body, err := ioutil.ReadAll(c.Request.Body)
 	if err != nil {
-		http.Error(w, "Error reading request body", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error reading request body"})
 		return
 	}
 	fmt.Println("Body:", string(body))
@@ -30,13 +30,13 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	var loginData Models.LoginEstudiante
 	err = json.Unmarshal(body, &loginData)
 	if err != nil {
-		http.Error(w, "Error decoding the request", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error decoding the request"})
 		return
 	}
 
 	loginEstudiante, err := GetLoginEstudiantePorCodigo(db.DB, loginData.FKInformacionEstudiante)
 	if err != nil {
-		http.Error(w, "Student login not found", http.StatusNotFound)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Student login not found"})
 		return
 	}
 
@@ -45,7 +45,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	// Get student information by student code
 	estudiante, err := Estudiantes.GetEstudiantePorCodigo(db.DB, loginData.FKInformacionEstudiante)
 	if err != nil {
-		http.Error(w, "Student not found", http.StatusNotFound)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Student not found"})
 		return
 	}
 
@@ -57,28 +57,28 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	err = bcrypt.CompareHashAndPassword([]byte(loginEstudiante.Password), []byte(loginData.Password))
 	if err != nil {
 		fmt.Println("Contraseñas no coinciden:", err)
-		http.Error(w, "Incorrect credentials", http.StatusUnauthorized)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Incorrect credentials"})
 		return
 	}
 	fmt.Println("Contraseñas coinciden")
 
 	// Create session
-	session, err := store.Get(r, "session-name")
+	session, err := store.Get(c.Request, "session-name")
 	if err != nil {
-		http.Error(w, "Error creating session", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating session"})
 		return
 	}
 
 	// Store the student code in the session
 	session.Values["codigoEstudiante"] = estudiante.CodigoEstudiante
-	err = session.Save(r, w)
+	err = session.Save(c.Request, c.Writer)
 	if err != nil {
-		http.Error(w, "Error saving session", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error saving session"})
 		return
 	}
 
 	// Redirect to the frontend (change "/path/to/index.html" to the correct path)
-	http.Redirect(w, r, "/index.html", http.StatusSeeOther)
+	c.Redirect(http.StatusSeeOther, "/index.html")
 }
 
 func GetLoginEstudiantePorCodigo(dbInstance *gorm.DB, codigoEstudiante uint) (db.LoginEstudiante, error) {

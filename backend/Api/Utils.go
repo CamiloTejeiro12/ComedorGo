@@ -3,43 +3,41 @@ package Api
 import (
 	"ComedorGo/backend/GeneratedQR"
 	"ComedorGo/backend/Models"
-	"encoding/json"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"net/http"
 )
 
 // GenerarYGuardarQR es un ejemplo de cómo podrías integrar la generación de QR a través de la API
-func GenerarYGuardarQR(w http.ResponseWriter, r *http.Request) {
+func GenerarYGuardarQR(c *gin.Context) {
 	var nuevoEstudiante Models.InformacionEstudiante
-	err := json.NewDecoder(r.Body).Decode(&nuevoEstudiante)
-	if err != nil {
-		http.Error(w, "Error al decodificar la solicitud", http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&nuevoEstudiante); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error al decodificar la solicitud"})
 		return
 	}
 
 	qrCodeString, err := GeneratedQR.GenerarQR(nuevoEstudiante)
 	if err != nil {
-		http.Error(w, "Error al generar el QR", http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al generar el QR"})
 		return
 	}
-	print(qrCodeString)
+	fmt.Println(qrCodeString)
 
 	// Puedes guardar el código QR en la base de datos u realizar otras acciones según tus necesidades
 
 	// Configurar la respuesta HTTP con el encabezado y el cuerpo JSON
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Código QR generado y guardado con éxito"})
+	c.JSON(http.StatusOK, gin.H{"message": "Código QR generado y guardado con éxito"})
 }
-func DesencriptarQR(w http.ResponseWriter, r *http.Request) {
+
+func DesencriptarQR(c *gin.Context) {
 	// Leer la información de InfoQR desde el cuerpo de la solicitud
 	var infoQRRequest struct {
 		Encrypted               string `json:"encrypted"`
 		FKInformacionEstudiante uint   `json:"codigoEstudiante"`
 	}
 
-	err := json.NewDecoder(r.Body).Decode(&infoQRRequest)
-	if err != nil {
-		http.Error(w, `{"error": "Error al decodificar la solicitud"}`, http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&infoQRRequest); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error al decodificar la solicitud"})
 		return
 	}
 
@@ -50,7 +48,7 @@ func DesencriptarQR(w http.ResponseWriter, r *http.Request) {
 	desencriptado, err := GeneratedQR.Decrypta(infoQRRequest.Encrypted)
 	if err != nil {
 		fmt.Printf("Error al desencriptar la información: %s\n", err)
-		http.Error(w, `{"error": "Error al desencriptar la información"}`, http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error al desencriptar la información"})
 		return
 	}
 
@@ -58,13 +56,13 @@ func DesencriptarQR(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("Información desencriptada: %s\n", desencriptado)
 
 	// Configurar la respuesta HTTP con el encabezado y el cuerpo JSON
-	w.Header().Set("Content-Type", "application/json")
+	c.Header("Content-Type", "application/json")
 
 	// Verificar si la desencriptación fue exitosa
 	if desencriptado == "" {
-		http.Error(w, `{"error": "La desencriptación no produjo resultados válidos"}`, http.StatusInternalServerError)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "La desencriptación no produjo resultados válidos"})
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]string{"decryptedInfo": desencriptado})
+	c.JSON(http.StatusOK, gin.H{"decryptedInfo": desencriptado})
 }
